@@ -1,0 +1,138 @@
+"""
+CNN -- AlexNet
+2012年，GPU上训练一个八层卷积神经网络的方法
+
+环境：
+      torch                         1.2.0+cpu
+      torchvision                   0.4.0+cpu
+
+CNN中的全连接层--就是普通隐藏层
+"""
+
+import torch
+from torch import nn
+import numpy as np
+from torch.autograd import Variable
+from torchvision.datasets import CIFAR10
+import torchvision
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+
+
+class AlexNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # 第一层是5*5的卷积，输入的channels是3，输出的channels是64，卷积核大小为5*5，步长为1，没有padding
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 64, 5),
+            nn.ReLU()
+        )
+
+        # 第二层是3*3的池化，步长是2
+        self.max_pool1 = nn.MaxPool2d(3, 2)
+
+        # 第三层是5*5的卷积，输入的channels是64，输出的channels是64，步长是1，没有padding
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 64, 5),
+            nn.ReLU()
+        )
+
+        # 第四层是3*3的池化，步长是2，没有padding
+        self.max_pool2 = nn.MaxPool2d(3, 2)
+
+        # 第五层是全连接层，输入是1024，输出是384
+        self.fc1 = nn.Sequential(
+            nn.Linear(1024, 384),
+            nn.ReLU()
+        )
+
+        # 第六层是全连接层，输入是384，输出是192
+        self.fc2 = nn.Sequential(
+            nn.Linear(384, 192),
+            nn.ReLU()
+        )
+
+        # 第七层是全连接层，输入是192，输出是10
+        self.fc3 = nn.Linear(192, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.max_pool1(x)
+        x = self.conv2(x)
+        x = self.max_pool2(x)
+
+        x = x.view(x.shape[0], -1)  # 将矩阵拉平|否则无法适应Linear的输入特征数
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        return x
+
+
+# alexnet = AlexNet()
+# print(alexnet)
+
+"""
+# 测试数据
+input_demo = Variable(torch.zeros(1, 3, 32, 32))
+output_demo = alexnet(input_demo)
+print(output_demo)
+"""
+
+
+def data_tf(x):
+    x = np.array(x, dtype='float32') / 255
+    x = (x - 0.5) / 0.5
+    x = x.transpose((2, 0, 1))  # 将channel放到第一维，只是pytorch要求的输入方式
+    x = torch.from_numpy(x)
+    return x
+
+
+train_set = CIFAR10(
+    root='D:\编程\python\PyTorch\img',
+    train=True,
+    transform=data_tf
+)
+print(train_set.data[1].shape)
+print(type(train_set.data[0]))
+
+"""
+plt.imshow(train_set.data[1])  # 查看数据
+plt.show()
+print(train_set.targets[1])  # 查看标签号
+print(train_set.class_to_idx)  # 查看标签名称对应关系
+"""
+
+train_data = DataLoader(
+    train_set, batch_size=64, shuffle=True
+)
+
+test_set = CIFAR10(
+    root='D:\编程\python\PyTorch\img',
+    train=False,
+    transform=data_tf
+)
+test_data = DataLoader(
+    test_set, batch_size=128, shuffle=False
+)
+
+net = AlexNet()
+
+optimizer = torch.optim.SGD(net.parameters(), lr=1e-1)
+criterion = nn.CrossEntropyLoss()
+
+for e in range(20):
+    train_loss = 0
+    for im, label in train_data:
+        im = Variable(im)
+        label = Variable(label)
+
+        out = net(im)
+        loss = criterion(out, label)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item()
+    print('epoch:{},Train Loss:{:.6f}'.format(e, train_loss / len(train_data)))
